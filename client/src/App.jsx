@@ -133,6 +133,19 @@ function App() {
         </div>
       )}
 
+      {/* Welcome Message */}
+      {currentView === 'upload' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+            <h2 className="text-2xl font-bold text-blue-900 mb-2">Welcome to CV Improv! 🚀</h2>
+            <p className="text-blue-700 text-lg">
+              Upload your CV and job description to get AI-powered optimization suggestions. 
+              We'll help you create an ATS-friendly resume that stands out to employers.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentView === 'kanban' ? (
