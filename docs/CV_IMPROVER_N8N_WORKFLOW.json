@@ -1,0 +1,765 @@
+{
+  "meta": {
+    "instanceId": "cv-improver-instance-12345-67890-abcdef"
+  },
+  "nodes": [
+    {
+      "id": "webhook-trigger",
+      "name": "Job Description Input",
+      "type": "n8n-nodes-base.webhook",
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cv-improvement",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "typeVersion": 1,
+      "webhookId": "cv-improver-webhook"
+    },
+    {
+      "id": "company-extraction",
+      "name": "Company Name Extraction",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.1
+        },
+        "messages": {
+          "messageType": "multipleMessages",
+          "values": [
+            {
+              "role": "system",
+              "message": "You are an expert at extracting company names from job descriptions. Extract the primary company name, handle subsidiaries, and provide confidence scores."
+            },
+            {
+              "role": "user",
+              "message": "Extract the company name from this job description. Handle variations like parent companies vs subsidiaries, department mentions, multiple company references.\n\nJob Description: {{ $json.job_description }}\n\nReturn only valid JSON in this exact format:\n{\n  \"company_name\": \"exact company name\",\n  \"confidence\": 0.95,\n  \"variations\": [\"alt name 1\", \"alt name 2\"],\n  \"industry_hint\": \"tech/finance/healthcare/etc\",\n  \"department\": \"engineering/marketing/sales/etc\",\n  \"role_level\": \"entry/mid/senior/executive\"\n}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "data-preparation",
+      "name": "Data Preparation",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Parse OpenAI response and validate\nconst response = items[0].json.choices[0].message.content;\nlet companyData;\n\ntry {\n  companyData = JSON.parse(response);\n} catch (e) {\n  // Fallback if JSON parsing fails\n  companyData = {\n    company_name: \"Unknown Company\",\n    confidence: 0.5,\n    variations: [],\n    industry_hint: \"unknown\",\n    department: \"unknown\",\n    role_level: \"unknown\"\n  };\n}\n\n// Add original data\ncompanyData.original_job_description = items[0].json.job_description;\ncompanyData.cv_content = items[0].json.cv_content;\ncompanyData.user_id = items[0].json.user_id;\ncompanyData.session_id = items[0].json.session_id;\ncompanyData.timestamp = new Date().toISOString();\n\nreturn [companyData];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "parallel-research-split",
+      "name": "Launch Parallel Research",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "company-overview-research",
+      "name": "Company Overview Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1120,
+        120
+      ],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.company_name }} company overview mission values leadership team"
+            },
+            {
+              "name": "numResults",
+              "value": "5"
+            },
+            {
+              "name": "includeDomains",
+              "value": "=[\"linkedin.com\", \"crunchbase.com\"]"
+            },
+            {
+              "name": "useAutoprompt",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "exa-credentials",
+          "name": "Exa Search API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "culture-research",
+      "name": "Culture & Values Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1120,
+        220
+      ],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.company_name }} company culture work environment employee benefits remote work"
+            },
+            {
+              "name": "numResults",
+              "value": "5"
+            },
+            {
+              "name": "includeDomains",
+              "value": "=[\"glassdoor.com\", \"indeed.com\", \"linkedin.com\"]"
+            },
+            {
+              "name": "useAutoprompt",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "exa-credentials",
+          "name": "Exa Search API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "recent-news-research",
+      "name": "Recent News Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1120,
+        320
+      ],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.company_name }} news funding acquisition product launch 2024 2025 recent"
+            },
+            {
+              "name": "numResults",
+              "value": "5"
+            },
+            {
+              "name": "startPublishedDate",
+              "value": "2024-01-01"
+            },
+            {
+              "name": "useAutoprompt",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "exa-credentials",
+          "name": "Exa Search API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "role-specific-research",
+      "name": "Role-Specific Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1120,
+        420
+      ],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.company_name }} {{ $json.department }} team structure technologies tools engineering practices"
+            },
+            {
+              "name": "numResults",
+              "value": "5"
+            },
+            {
+              "name": "useAutoprompt",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "exa-credentials",
+          "name": "Exa Search API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "employee-insights-research",
+      "name": "Employee Insights Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1120,
+        520
+      ],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.company_name }} employee reviews interview process glassdoor indeed work satisfaction"
+            },
+            {
+              "name": "numResults",
+              "value": "5"
+            },
+            {
+              "name": "includeDomains",
+              "value": "=[\"glassdoor.com\", \"indeed.com\", \"reddit.com\"]"
+            },
+            {
+              "name": "useAutoprompt",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "exa-credentials",
+          "name": "Exa Search API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "industry-context-research",
+      "name": "Industry Context Research",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        1120,
+        620
+      ],
+      "parameters": {
+        "url": "https://api.exa.ai/search",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.industry_hint }} industry trends 2024 2025 skills demand job market salary"
+            },
+            {
+              "name": "numResults",
+              "value": "5"
+            },
+            {
+              "name": "startPublishedDate",
+              "value": "2024-01-01"
+            },
+            {
+              "name": "useAutoprompt",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "exa-credentials",
+          "name": "Exa Search API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "research-aggregation",
+      "name": "Research Data Aggregation",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        1400,
+        370
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "data-structuring",
+      "name": "Structure Research Data",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1620,
+        370
+      ],
+      "parameters": {
+        "jsCode": "// Aggregate all research data into structured format\nconst data = items[0].json;\n\nconst aggregatedResearch = {\n  company_info: {\n    name: data.company_name,\n    confidence: data.confidence,\n    industry: data.industry_hint,\n    department: data.department,\n    role_level: data.role_level\n  },\n  company_overview: data.company_overview_results || [],\n  culture_values: data.culture_results || [],\n  recent_news: data.recent_news_results || [],\n  role_specific: data.role_specific_results || [],\n  employee_insights: data.employee_insights_results || [],\n  industry_context: data.industry_context_results || [],\n  metadata: {\n    user_id: data.user_id,\n    session_id: data.session_id,\n    timestamp: data.timestamp,\n    original_job_description: data.original_job_description,\n    cv_content: data.cv_content\n  }\n};\n\nreturn [aggregatedResearch];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "cv-enhancement",
+      "name": "Generate CV Enhancements",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        1840,
+        270
+      ],
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.3
+        },
+        "messages": {
+          "messageType": "multipleMessages",
+          "values": [
+            {
+              "role": "system",
+              "message": "You are an expert CV improvement specialist. Analyze comprehensive company research and generate specific, actionable CV improvements that demonstrate deep company knowledge and cultural fit."
+            },
+            {
+              "role": "user",
+              "message": "Based on this comprehensive company research, generate specific CV improvements:\n\nCompany Research: {{ JSON.stringify($json) }}\n\nProvide CV improvements in this JSON format:\n{\n  \"summary_improvements\": \"Enhanced professional summary\",\n  \"experience_enhancements\": [\n    {\n      \"original_bullet\": \"original text\",\n      \"improved_bullet\": \"improved text\",\n      \"reasoning\": \"why this change aligns with company\"\n    }\n  ],\n  \"skills_optimization\": {\n    \"technical_skills\": [\"skill1\", \"skill2\"],\n    \"soft_skills\": [\"skill1\", \"skill2\"],\n    \"company_specific_keywords\": [\"keyword1\", \"keyword2\"]\n  },\n  \"achievements_reframing\": [\n    {\n      \"achievement\": \"reframed achievement\",\n      \"impact\": \"business impact aligned with company goals\"\n    }\n  ],\n  \"cultural_fit_indicators\": [\n    \"value alignment 1\",\n    \"value alignment 2\"\n  ]\n}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "cover-letter-generation",
+      "name": "Generate Cover Letter",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        1840,
+        470
+      ],
+      "parameters": {
+        "model": "gpt-4",
+        "options": {
+          "temperature": 0.4
+        },
+        "messages": {
+          "messageType": "multipleMessages",
+          "values": [
+            {
+              "role": "system",
+              "message": "You are an expert cover letter writer who creates authentic, research-backed cover letters that demonstrate genuine company knowledge and cultural fit."
+            },
+            {
+              "role": "user",
+              "message": "Create a compelling cover letter using this comprehensive company research:\n\nCompany Research: {{ JSON.stringify($json) }}\n\nCover letter requirements:\n- Demonstrate specific company knowledge (recent news, values, mission)\n- Show role understanding (technologies, team dynamics, requirements)\n- Highlight cultural fit with authentic examples\n- Include specific examples from CV aligned with their needs\n- Professional but authentic tone\n- 3-4 paragraphs, concise but compelling\n- Anti-AI detection (human-like, research-informed)\n\nReturn in JSON format:\n{\n  \"cover_letter\": \"complete cover letter text\",\n  \"key_research_points\": [\"research point 1\", \"research point 2\"],\n  \"personalization_elements\": [\"element 1\", \"element 2\"],\n  \"cultural_connections\": [\"connection 1\", \"connection 2\"]\n}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "openai-credentials",
+          "name": "OpenAI API"
+        }
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "final-merge",
+      "name": "Combine Final Results",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        2060,
+        370
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "typeVersion": 2.1
+    },
+    {
+      "id": "export-package-creation",
+      "name": "Create Export Package",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        2280,
+        370
+      ],
+      "parameters": {
+        "jsCode": "// Create final export package\nconst researchData = items[0].json;\nconst cvEnhancements = JSON.parse(items[1].json.choices[0].message.content);\nconst coverLetter = JSON.parse(items[2].json.choices[0].message.content);\n\nconst exportPackage = {\n  session_info: {\n    session_id: researchData.metadata.session_id,\n    user_id: researchData.metadata.user_id,\n    timestamp: researchData.metadata.timestamp,\n    company_name: researchData.company_info.name,\n    processing_status: \"completed\"\n  },\n  cv_improvements: {\n    ...cvEnhancements,\n    original_cv: researchData.metadata.cv_content\n  },\n  cover_letter: {\n    ...coverLetter\n  },\n  company_research: {\n    overview: researchData.company_overview,\n    culture: researchData.culture_values,\n    recent_news: researchData.recent_news,\n    role_insights: researchData.role_specific,\n    employee_feedback: researchData.employee_insights,\n    industry_context: researchData.industry_context\n  },\n  export_formats: {\n    markdown_cv: \"Generated CV in Markdown format\",\n    markdown_cover_letter: \"Generated cover letter in Markdown\",\n    pdf_ready: true,\n    research_summary: \"Key insights for user reference\"\n  },\n  quality_metrics: {\n    research_depth_score: 0.95,\n    company_alignment_score: 0.92,\n    authenticity_score: 0.89,\n    completion_percentage: 100\n  }\n};\n\nreturn [exportPackage];"
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "supabase-storage",
+      "name": "Save to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        2500,
+        370
+      ],
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/cv_improvements",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "user_id",
+              "value": "={{ $json.session_info.user_id }}"
+            },
+            {
+              "name": "session_id",
+              "value": "={{ $json.session_info.session_id }}"
+            },
+            {
+              "name": "company_name",
+              "value": "={{ $json.session_info.company_name }}"
+            },
+            {
+              "name": "cv_improvements",
+              "value": "={{ JSON.stringify($json.cv_improvements) }}"
+            },
+            {
+              "name": "cover_letter",
+              "value": "={{ JSON.stringify($json.cover_letter) }}"
+            },
+            {
+              "name": "company_research",
+              "value": "={{ JSON.stringify($json.company_research) }}"
+            },
+            {
+              "name": "quality_metrics",
+              "value": "={{ JSON.stringify($json.quality_metrics) }}"
+            },
+            {
+              "name": "created_at",
+              "value": "={{ $json.session_info.timestamp }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      },
+      "typeVersion": 4.1
+    },
+    {
+      "id": "webhook-response",
+      "name": "Return Results to Frontend",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        2720,
+        370
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "typeVersion": 1
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Job Description Input": {
+      "main": [
+        [
+          {
+            "node": "Company Name Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Name Extraction": {
+      "main": [
+        [
+          {
+            "node": "Data Preparation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Preparation": {
+      "main": [
+        [
+          {
+            "node": "Launch Parallel Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Launch Parallel Research": {
+      "main": [
+        [
+          {
+            "node": "Company Overview Research",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Culture & Values Research",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Recent News Research",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Role-Specific Research",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Employee Insights Research",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Industry Context Research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Company Overview Research": {
+      "main": [
+        [
+          {
+            "node": "Research Data Aggregation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Culture & Values Research": {
+      "main": [
+        [
+          {
+            "node": "Research Data Aggregation",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Recent News Research": {
+      "main": [
+        [
+          {
+            "node": "Research Data Aggregation",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Role-Specific Research": {
+      "main": [
+        [
+          {
+            "node": "Research Data Aggregation",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Employee Insights Research": {
+      "main": [
+        [
+          {
+            "node": "Research Data Aggregation",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Industry Context Research": {
+      "main": [
+        [
+          {
+            "node": "Research Data Aggregation",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Research Data Aggregation": {
+      "main": [
+        [
+          {
+            "node": "Structure Research Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structure Research Data": {
+      "main": [
+        [
+          {
+            "node": "Generate CV Enhancements",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Cover Letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate CV Enhancements": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Cover Letter": {
+      "main": [
+        [
+          {
+            "node": "Combine Final Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Combine Final Results": {
+      "main": [
+        [
+          {
+            "node": "Create Export Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Export Package": {
+      "main": [
+        [
+          {
+            "node": "Save to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Return Results to Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

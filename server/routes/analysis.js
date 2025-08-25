@@ -1,7 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const AnalysisController = require('../controllers/analysisController');
-const { authenticateToken, requirePlan } = require('../middleware/auth');
 const { validate, validateParams, schemas, paramSchemas } = require('../utils/validation');
 
 const router = express.Router();
@@ -18,9 +17,6 @@ const analysisLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// All routes require authentication
-router.use(authenticateToken);
-
 // Analyze CV compatibility with job description
 router.post('/analyze', 
   analysisLimiter,
@@ -31,19 +27,22 @@ router.post('/analyze',
 // Optimize CV based on analysis
 router.post('/optimize',
   analysisLimiter,
-  requirePlan('freemium'), // Available to all plans
   validate(schemas.analyzeCV), // Reuse the same schema
   AnalysisController.optimizeCV
 );
 
-// Get analysis results for a CV
-router.get('/cv/:id',
+// Get analysis results for a CV (requires authentication)
+router.get(
+  '/cv/:id',
+  requireAuth, // e.g., Firebase ID token verifier middleware
   validateParams(paramSchemas.id),
   AnalysisController.getAnalysis
 );
 
-// Get detailed skill gap analysis
-router.get('/skill-gaps',
+// Get detailed skill gap analysis (requires authentication)
+router.get(
+  '/skill-gaps',
+  requireAuth,
   AnalysisController.getSkillGapAnalysis
 );
 

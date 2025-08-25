@@ -1,0 +1,90 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+match /files/{userId}/{fileId} {
+    // Read operations only need auth + ownership
+    allow read: if isAuthenticated() && isOwner(userId);
+
+    // Write operations need to validate resource properties
+    allow write: if isAuthenticated() &&
+                   isOwner(userId) &&
+                   resource != null &&
+                   isValidFileType() &&
+                   isValidFileSize() &&
+                   isValidFileName();
+}
+    
+    function isValidFileSize() {
+      return resource.size <= 10 * 1024 * 1024; // 10MB limit
+    }
+    
+    function isValidFileName() {
+      return resource.name.size() <= 255; // Reasonable filename length
+    }
+
+    // User files (CVs and documents)
+    match /users/{userId}/{allPaths=**} {
+      // Allow read/write for authenticated users on their own files
+      allow read, write: if isAuthenticated() && 
+                            isOwner(userId) &&
+                            isValidFileType() &&
+       // helper functions at top-level of storage.rules
+       function isValidUploadType() {
+         return request.resource.contentType.matches('application/pdf') ||
+                request.resource.contentType.matches('application/msword') ||
+                request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
+                request.resource.contentType.matches('text/plain');
+       }
+       
+       function isValidUploadSize() {
+         return request.resource.size <= 10 * 1024 * 1024;
+       }
+       
+       function isValidUploadName() {
+         return request.resource.name.size() <= 255;
+       }
+       
+       // original rule, simplified to reuse helpers
+       allow create: if isAuthenticated() &&
+                        isOwner(userId) &&
+                        isValidUploadType() &&
+                        isValidUploadSize() &&
+                        isValidUploadName();
+                            isValidFileName();
+                            
+      // Allow creation with additional validation
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) &&
+                       request.resource.contentType.matches('application/pdf|application/msword|application/vnd.openxmlformats-officedocument.wordprocessingml.document|text/plain') &&
+                       request.resource.size <= 10 * 1024 * 1024 && // 10MB
+                       request.resource.name.size() <= 255;
+    }
+
+    // Public assets (templates, logos, etc.) - read only
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if false; // Only server-side can write public assets
+    }
+
+    // Temp files (for processing) - short-lived, user-owned
+    match /temp/{userId}/{allPaths=**} {
+      allow read, write, delete: if isAuthenticated() && 
+                                    isOwner(userId);
+      // Temp files should be cleaned up by server-side functions
+    }
+
+    // Deny all other requests
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

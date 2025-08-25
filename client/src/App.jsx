@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import AuthModal from './components/auth/AuthModal';
 import CVUpload from './components/CVUpload';
 import JobInput from './components/JobInput';
 import CVAnalysis from './components/CVAnalysis';
@@ -7,7 +9,8 @@ import KanbanBoard from './components/KanbanBoard';
 import CreateApplication from './components/CreateApplication';
 import './index.css';
 
-function App() {
+function AppContent() {
+  const { currentUser, userProfile, logout } = useAuth();
   const [uploadedCV, setUploadedCV] = useState(null);
   const [savedJob, setSavedJob] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -15,6 +18,8 @@ function App() {
   const [showCreateApplication, setShowCreateApplication] = useState(false);
   const [currentView, setCurrentView] = useState('upload'); // 'upload', 'kanban'
   const [alerts, setAlerts] = useState([]);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState('login');
 
   const addAlert = (message, type = 'error') => {
     const alert = {
@@ -67,6 +72,30 @@ function App() {
     addAlert(`Application for "${application.job.title}" created successfully!`, 'success');
   };
 
+  const handleLogin = () => {
+    setAuthModalMode('login');
+    setShowAuthModal(true);
+  };
+
+  const handleSignup = () => {
+    setAuthModalMode('signup');
+    setShowAuthModal(true);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setUploadedCV(null);
+      setSavedJob(null);
+      setAnalysisResult(null);
+      setOptimizationResult(null);
+      setCurrentView('upload');
+      addAlert('Logged out successfully', 'success');
+    } catch (error) {
+      addAlert('Error logging out', 'error');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -78,28 +107,78 @@ function App() {
               <span className="text-sm text-gray-500">AI-Powered CV Optimization</span>
             </div>
             
-            {/* Navigation */}
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setCurrentView('upload')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                  currentView === 'upload'
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                CV Builder
-              </button>
-              <button
-                onClick={() => setCurrentView('kanban')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
-                  currentView === 'kanban'
-                    ? 'bg-primary-600 text-white'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                Applications
-              </button>
+            <div className="flex items-center space-x-4">
+              {/* Navigation - Only show if authenticated */}
+              {currentUser && (
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => setCurrentView('upload')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                      currentView === 'upload'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    CV Builder
+                  </button>
+                  <button
+                    onClick={() => setCurrentView('kanban')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                      currentView === 'kanban'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Applications
+                  </button>
+                </div>
+              )}
+
+              {/* Authentication */}
+              {currentUser ? (
+                <div className="flex items-center space-x-4">
+                  {/* User profile */}
+                  <div className="flex items-center space-x-2">
+                    <div className="text-sm">
+                      <p className="font-medium text-gray-900">
+                        {userProfile?.displayName || currentUser.email}
+                      </p>
+                      <p className="text-xs text-gray-500 capitalize">
+                        {userProfile?.plan || 'freemium'} plan
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* CV count indicator */}
+                  {userProfile && (
+                    <div className="text-xs text-gray-500">
+                      {userProfile.cvCount || 0}/{userProfile.maxCvs || 3} CVs
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleLogout}
+                    className="px-3 py-2 text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleLogin}
+                    className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+                  >
+                    Sign In
+                  </button>
+                  <button
+                    onClick={handleSignup}
+                    className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+                  >
+                    Sign Up
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -133,12 +212,95 @@ function App() {
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'kanban' ? (
-          /* Kanban Board View */
-          <KanbanBoard onError={(error) => addAlert(error, 'error')} />
-        ) : (
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        defaultMode={authModalMode}
+      />
+
+      {/* Welcome Message */}
+      {currentUser && currentView === 'upload' && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+            <h2 className="text-2xl font-bold text-blue-900 mb-2">
+              Welcome back, {userProfile?.displayName || 'there'}! 🚀
+            </h2>
+            <p className="text-blue-700 text-lg">
+              Upload your CV and job description to get AI-powered optimization suggestions. 
+              We'll help you create an ATS-friendly resume that stands out to employers.
+            </p>
+            {userProfile?.plan === 'freemium' && (
+              <div className="mt-3 text-sm text-blue-600">
+                You have {(userProfile?.maxCvs || 3) - (userProfile?.cvCount || 0)} CV uploads remaining on your freemium plan.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Landing Page for Non-authenticated Users */}
+      {!currentUser && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="text-center">
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">
+              Optimize Your CV with AI
+            </h2>
+            <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+              Get AI-powered insights to improve your resume, track job applications, 
+              and increase your chances of landing interviews.
+            </p>
+            
+            <div className="flex justify-center space-x-4 mb-12">
+              <button
+                onClick={handleSignup}
+                className="px-8 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 text-lg"
+              >
+                Get Started Free
+              </button>
+              <button
+                onClick={handleLogin}
+                className="px-8 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 text-lg"
+              >
+                Sign In
+              </button>
+            </div>
+
+            {/* Features */}
+            <div className="grid md:grid-cols-3 gap-8 mt-16">
+              <div className="text-center">
+                <div className="text-4xl mb-4">🤖</div>
+                <h3 className="text-xl font-semibold mb-2">AI-Powered Analysis</h3>
+                <p className="text-gray-600">
+                  Get detailed compatibility analysis between your CV and job descriptions
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl mb-4">📊</div>
+                <h3 className="text-xl font-semibold mb-2">ATS Optimization</h3>
+                <p className="text-gray-600">
+                  Improve your resume's ATS score and bypass automated filters
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="text-4xl mb-4">📋</div>
+                <h3 className="text-xl font-semibold mb-2">Application Tracking</h3>
+                <p className="text-gray-600">
+                  Organize and track your job applications with our Kanban board
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content - Only show if authenticated */}
+      {currentUser && (
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {currentView === 'kanban' ? (
+            /* Kanban Board View */
+            <KanbanBoard onError={(error) => addAlert(error, 'error')} />
+          ) : (
           /* CV Builder View */
           <div className="space-y-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -334,7 +496,10 @@ function App() {
             )}
           </div>
         )}
-      </main>
+            </div>
+          )}
+        </main>
+      )}
 
       {/* Footer */}
       <footer className="bg-white border-t mt-16">
@@ -345,6 +510,15 @@ function App() {
         </div>
       </footer>
     </div>
+  );
+}
+
+// Main App component with AuthProvider wrapper
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

@@ -3,118 +3,50 @@ const aiService = require('../services/aiService');
 
 class AnalysisController {
   static async analyzeCV(req, res) {
-    const client = await pool.connect();
-    
     try {
-      await client.query('BEGIN');
-      
-      const { cvId, jobId } = req.body;
-      const userId = req.userId;
+      const { cvText, jobDescription } = req.body;
 
-      // Verify CV belongs to user
-      const cvResult = await client.query(
-        'SELECT id, title, original_text FROM cvs WHERE id = $1 AND user_id = $2',
-        [cvId, userId]
-      );
-
-      if (cvResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({
-          success: false,
-          message: 'CV not found or does not belong to you'
-        });
-      }
-
-      const cv = cvResult.rows[0];
-
-      if (!cv.original_text) {
-        await client.query('ROLLBACK');
+      // Validate input
+      if (!cvText || !jobDescription) {
         return res.status(400).json({
           success: false,
-          message: 'CV text is empty. Please upload a CV with content.'
+          message: 'CV text and job description are required'
         });
       }
 
-      // Verify job belongs to user
-      const jobResult = await client.query(
-        'SELECT id, title, company, description FROM jobs WHERE id = $1 AND user_id = $2',
-        [jobId, userId]
-      );
-
-      if (jobResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({
+      if (typeof cvText !== 'string' || typeof jobDescription !== 'string') {
+        return res.status(400).json({
           success: false,
-          message: 'Job description not found or does not belong to you'
+          message: 'CV text and job description must be strings'
         });
       }
 
-      const job = jobResult.rows[0];
+      if (cvText.trim().length === 0 || jobDescription.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'CV text and job description cannot be empty'
+        });
+      }
 
       // Perform AI analysis
       console.log('Starting AI analysis for CV and Job...');
       const analysisResult = await aiService.analyzeCompatibility(
-        cv.original_text,
-        job.description
+        cvText,
+        jobDescription
       );
 
       // Calculate additional metrics
       const compatibilityScore = analysisResult.compatibilityScore || 0;
       const atsScore = aiService.calculateATSScore(
-        cv.original_text, 
+        cvText, 
         analysisResult.keywordGaps || []
       );
-
-      // Update CV with analysis results
-      const updatedCv = await client.query(
-        `UPDATE cvs 
-         SET compatibility_score = $1, analysis_data = $2, status = 'analyzed', updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3 
-         RETURNING id, title, compatibility_score, analysis_data, status`,
-        [
-          compatibilityScore, 
-          JSON.stringify({
-            ...analysisResult,
-            atsScore,
-            analyzedAt: new Date(),
-            jobInfo: {
-              id: job.id,
-              title: job.title,
-              company: job.company
-            }
-          }),
-          cvId
-        ]
-      );
-
-      // Log audit event
-      await client.query(
-        'INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [
-          userId,
-          'CV_ANALYZED',
-          'cv',
-          cvId,
-          JSON.stringify({ 
-            jobId,
-            compatibilityScore,
-            atsScore,
-            skillsGaps: analysisResult.skillsGaps?.length || 0
-          }),
-          req.ip || req.connection.remoteAddress,
-          req.get('User-Agent')
-        ]
-      );
-
-      await client.query('COMMIT');
 
       res.json({
         success: true,
         message: 'CV analysis completed successfully',
         data: {
           analysis: {
-            cvId,
-            jobId,
             compatibilityScore,
             atsScore,
             skillsMatching: analysisResult.skillsMatching || [],
@@ -125,23 +57,11 @@ class AnalysisController {
             recommendations: analysisResult.recommendations || [],
             summary: analysisResult.summary || 'Analysis completed',
             analyzedAt: new Date()
-          },
-          cv: {
-            id: updatedCv.rows[0].id,
-            title: updatedCv.rows[0].title,
-            status: updatedCv.rows[0].status,
-            compatibilityScore: updatedCv.rows[0].compatibility_score
-          },
-          job: {
-            id: job.id,
-            title: job.title,
-            company: job.company
           }
         }
       });
 
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('CV analysis error:', error);
       
       if (error.message.includes('OpenAI') || error.message.includes('API')) {
@@ -156,136 +76,59 @@ class AnalysisController {
         success: false,
         message: 'Internal server error during CV analysis'
       });
-    } finally {
-      client.release();
     }
   }
 
   static async optimizeCV(req, res) {
-    const client = await pool.connect();
-    
     try {
-      await client.query('BEGIN');
-      
-      const { cvId, jobId } = req.body;
-      const userId = req.userId;
+      const { cvText, jobDescription, analysisData } = req.body;
 
-      // Get CV with analysis data
-      const cvResult = await client.query(
-        'SELECT id, title, original_text, analysis_data FROM cvs WHERE id = $1 AND user_id = $2',
-        [cvId, userId]
-      );
-
-      if (cvResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({
-          success: false,
-          message: 'CV not found or does not belong to you'
-        });
-      }
-
-      const cv = cvResult.rows[0];
-
-      if (!cv.analysis_data) {
-        await client.query('ROLLBACK');
+      // Validate input
+      if (!cvText || !jobDescription) {
         return res.status(400).json({
           success: false,
-          message: 'CV must be analyzed before optimization. Please run analysis first.'
+          message: 'CV text and job description are required'
         });
       }
 
-      // Get job description
-      const jobResult = await client.query(
-        'SELECT id, title, company, description FROM jobs WHERE id = $1 AND user_id = $2',
-        [jobId, userId]
-      );
-
-      if (jobResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({
+      if (typeof cvText !== 'string' || typeof jobDescription !== 'string') {
+        return res.status(400).json({
           success: false,
-          message: 'Job description not found'
+          message: 'CV text and job description must be strings'
         });
       }
 
-      const job = jobResult.rows[0];
+      if (cvText.trim().length === 0 || jobDescription.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'CV text and job description cannot be empty'
+        });
+      }
 
       // Perform AI optimization
       console.log('Starting AI optimization for CV...');
       const optimizationResult = await aiService.optimizeCV(
-        cv.original_text,
-        job.description,
-        cv.analysis_data
+        cvText,
+        jobDescription,
+        analysisData || {}
       );
-
-      // Update CV with optimized text
-      const updatedCv = await client.query(
-        `UPDATE cvs 
-         SET optimized_text = $1, status = 'optimized', updated_at = CURRENT_TIMESTAMP,
-             analysis_data = jsonb_set(analysis_data, '{optimization}', $2)
-         WHERE id = $3 
-         RETURNING id, title, optimized_text, status, analysis_data`,
-        [
-          optimizationResult.optimizedCV,
-          JSON.stringify({
-            ...optimizationResult,
-            optimizedAt: new Date()
-          }),
-          cvId
-        ]
-      );
-
-      // Calculate new ATS score for optimized CV
-      const newAtsScore = aiService.calculateATSScore(
-        optimizationResult.optimizedCV,
-        cv.analysis_data.keywordGaps || []
-      );
-
-      // Log audit event
-      await client.query(
-        'INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, ip_address, user_agent) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [
-          userId,
-          'CV_OPTIMIZED',
-          'cv',
-          cvId,
-          JSON.stringify({ 
-            jobId,
-            atsScoreImprovement: newAtsScore - (cv.analysis_data.atsScore || 0),
-            keywordOptimizations: optimizationResult.keywordOptimizations?.length || 0
-          }),
-          req.ip || req.connection.remoteAddress,
-          req.get('User-Agent')
-        ]
-      );
-
-      await client.query('COMMIT');
 
       res.json({
         success: true,
         message: 'CV optimization completed successfully',
         data: {
           optimization: {
-            cvId,
-            jobId,
-            originalAtsScore: cv.analysis_data.atsScore || 0,
-            newAtsScore,
-            improvement: newAtsScore - (cv.analysis_data.atsScore || 0),
+            optimizedCV: optimizationResult.optimizedCV,
             changesExplanation: optimizationResult.changesExplanation || [],
             keywordOptimizations: optimizationResult.keywordOptimizations || [],
+            atsScore: optimizationResult.atsScore || 0,
+            readabilityScore: optimizationResult.readabilityScore || 0,
             optimizedAt: new Date()
-          },
-          cv: {
-            id: updatedCv.rows[0].id,
-            title: updatedCv.rows[0].title,
-            status: updatedCv.rows[0].status,
-            optimizedText: updatedCv.rows[0].optimized_text
           }
         }
       });
 
     } catch (error) {
-      await client.query('ROLLBACK');
       console.error('CV optimization error:', error);
       
       if (error.message.includes('OpenAI') || error.message.includes('API')) {
@@ -300,8 +143,6 @@ class AnalysisController {
         success: false,
         message: 'Internal server error during CV optimization'
       });
-    } finally {
-      client.release();
     }
   }
 
