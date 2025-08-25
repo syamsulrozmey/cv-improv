@@ -334,6 +334,8 @@ function App() {
             )}
           </div>
         )}
+          </div>
+        )}
       </main>
 
       {/* Footer */}
