@@ -1,0 +1,140 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isValidUser() {
+      return isAuthenticated() && 
+             request.auth.token.email_verified == true;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+      
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) && 
+                       validateUserData();
+      
+      function validateUserData() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['email', 'displayName', 'plan', 'cvCount', 'maxCvs']) &&
+               data.email is string &&
+               data.displayName is string &&
+               data.plan in ['freemium', 'paid'] &&
+               data.cvCount is number &&
+               data.maxCvs is number &&
+               data.cvCount >= 0 &&
+               data.maxCvs > 0;
+      }
+    }
+
+    // CVs collection
+    match /cvs/{cvId} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(resource.data.userId);
+                            
+      allow create: if isAuthenticated() && 
+                       isOwner(request.resource.data.userId) &&
+                       validateCVData() &&
+                       checkCVLimit();
+      
+      function validateCVData() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['userId', 'title', 'originalText', 'status']) &&
+               data.userId is string &&
+               data.title is string &&
+               data.originalText is string &&
+               data.status in ['processing', 'optimized', 'error'] &&
+               data.title.size() <= 200 &&
+               data.originalText.size() <= 50000; // 50KB text limit
+      }
+      
+      function checkCVLimit() {
+        let userId = request.resource.data.userId;
+        let userDoc = get(/databases/$(database)/documents/users/$(userId));
+        return userDoc.data.plan == 'paid' || 
+               userDoc.data.cvCount < userDoc.data.maxCvs;
+      }
+    }
+
+    // Jobs collection
+    match /jobs/{jobId} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(resource.data.userId);
+                            
+      allow create: if isAuthenticated() && 
+                       isOwner(request.resource.data.userId) &&
+                       validateJobData();
+      
+      function validateJobData() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['userId', 'description']) &&
+               data.userId is string &&
+               data.description is string &&
+               data.description.size() <= 20000 && // 20KB text limit
+               (data.title == null || (data.title is string && data.title.size() <= 200)) &&
+               (data.company == null || (data.company is string && data.company.size() <= 200));
+      }
+    }
+
+    // Applications collection
+    match /applications/{applicationId} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(resource.data.userId);
+                            
+      allow create: if isAuthenticated() && 
+                       isOwner(request.resource.data.userId) &&
+                       validateApplicationData();
+      
+      function validateApplicationData() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['userId', 'cvId', 'jobId', 'status']) &&
+               data.userId is string &&
+               data.cvId is string &&
+               data.jobId is string &&
+               data.status in ['applied', 'interviewing', 'offer', 'rejected', 'withdrawn'] &&
+               (data.notes == null || (data.notes is string && data.notes.size() <= 2000));
+      }
+    }
+
+    // Analysis collection
+    match /analysis/{analysisId} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(resource.data.userId);
+                            
+      allow create: if isAuthenticated() && 
+                       isOwner(request.resource.data.userId) &&
+                       validateAnalysisData();
+      
+      function validateAnalysisData() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['userId', 'cvId', 'jobId', 'compatibilityScore']) &&
+               data.userId is string &&
+               data.cvId is string &&
+               data.jobId is string &&
+               data.compatibilityScore is number &&
+               data.compatibilityScore >= 0 &&
+               data.compatibilityScore <= 100;
+      }
+    }
+
+    // Templates collection (read-only for users)
+    match /templates/{templateId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Only admins can write templates (handled server-side)
+    }
+
+    // Deny all other requests
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
