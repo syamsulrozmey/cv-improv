@@ -152,7 +152,7 @@ export class CVService extends FirestoreService {
       fileSize: cvData.fileSize || 0,
       stats: {
         textLength: cvData.originalText?.length || 0,
-        wordCount: cvData.originalText?.split(/\s+/).length || 0,
+        wordCount: cvData.originalText?.trim() ? cvData.originalText.trim().split(/\s+/).length : 0,
         processingTime: 0
       },
       metadata: cvData.metadata || {}

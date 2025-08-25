@@ -10,12 +10,18 @@ service firebase.storage {
       return request.auth.uid == userId;
     }
     
-    function isValidFileType() {
-      return resource.contentType.matches('application/pdf') ||
-             resource.contentType.matches('application/msword') ||
-             resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
-             resource.contentType.matches('text/plain');
-    }
+match /files/{userId}/{fileId} {
+    // Read operations only need auth + ownership
+    allow read: if isAuthenticated() && isOwner(userId);
+
+    // Write operations need to validate resource properties
+    allow write: if isAuthenticated() &&
+                   isOwner(userId) &&
+                   resource != null &&
+                   isValidFileType() &&
+                   isValidFileSize() &&
+                   isValidFileName();
+}
     
     function isValidFileSize() {
       return resource.size <= 10 * 1024 * 1024; // 10MB limit
@@ -31,7 +37,28 @@ service firebase.storage {
       allow read, write: if isAuthenticated() && 
                             isOwner(userId) &&
                             isValidFileType() &&
-                            isValidFileSize() &&
+       // helper functions at top-level of storage.rules
+       function isValidUploadType() {
+         return request.resource.contentType.matches('application/pdf') ||
+                request.resource.contentType.matches('application/msword') ||
+                request.resource.contentType.matches('application/vnd.openxmlformats-officedocument.wordprocessingml.document') ||
+                request.resource.contentType.matches('text/plain');
+       }
+       
+       function isValidUploadSize() {
+         return request.resource.size <= 10 * 1024 * 1024;
+       }
+       
+       function isValidUploadName() {
+         return request.resource.name.size() <= 255;
+       }
+       
+       // original rule, simplified to reuse helpers
+       allow create: if isAuthenticated() &&
+                        isOwner(userId) &&
+                        isValidUploadType() &&
+                        isValidUploadSize() &&
+                        isValidUploadName();
                             isValidFileName();
                             
       // Allow creation with additional validation

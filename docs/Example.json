@@ -261,7 +261,7 @@
               "id": "8a774c1d-c4b1-427a-aa4d-cda0071656ce",
               "name": "url",
               "type": "string",
-              "value": "=https://{{ $json.url.extractDomain() }}"
+              "value": "={{ new URL($json.url).origin }}"
             }
           ]
         }
@@ -304,7 +304,7 @@
             }
           ]
         },
-        "toolDescription": "Call this tool to check if a company profile exists in either crunchbase, wellfound or linkedin.\n* To check if a company has a crunchbase profile, use the query \"site: https://crunchbase.com/organizations (company)\"\n* To check if a company has a wellfound profile, use the query \"site: https://wellfound.com/company (company)\"\n* To check if a company has a linked company profile, use the query \"site: https://linkedin.com/company (company)\"",
+        "toolDescription": "Call this tool to check if a company profile exists in either crunchbase, wellfound or linkedin.\n* To check Crunchbase: site:crunchbase.com/organization <company>\n* To check Wellfound: site:wellfound.com/company <company>\n* To check LinkedIn: site:linkedin.com/company <company>",
         "optimizeResponse": true,
         "nodeCredentialType": "serpApi"
       },

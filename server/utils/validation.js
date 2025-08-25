@@ -100,8 +100,16 @@ const schemas = {
 
   // Analysis schema
   analyzeCV: Joi.object({
-    cvId: Joi.number().integer().positive().required(),
-    jobId: Joi.number().integer().positive().required()
+    cvText: Joi.string().min(50).max(10000).required().messages({
+      'string.min': 'CV text must be at least 50 characters long',
+      'string.max': 'CV text cannot exceed 10,000 characters',
+      'any.required': 'CV text is required'
+    }),
+    jobDescription: Joi.string().min(10).max(10000).required().messages({
+      'string.min': 'Job description must be at least 10 characters long',
+      'string.max': 'Job description cannot exceed 10,000 characters',
+      'any.required': 'Job description is required'
+    })
   })
 };
 

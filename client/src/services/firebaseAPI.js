@@ -3,154 +3,6 @@ import { cvService, jobService, applicationService, analysisService } from './fi
 import { storageService } from './storage';
 
 /**
- * OpenAI API Service for AI analysis
- */
-class OpenAIService {
-  constructor() {
-    this.apiKey = process.env.REACT_APP_OPENAI_API_KEY;
-    this.baseURL = 'https://api.openai.com/v1';
-  }
-
-  /**
-   * Analyze CV compatibility with job description
-   */
-  async analyzeCVCompatibility(cvText, jobDescription) {
-    const prompt = `
-Analyze the following CV against this job description and provide a detailed compatibility analysis.
-
-CV:
-${cvText}
-
-Job Description:
-${jobDescription}
-
-Please provide a JSON response with the following structure:
-{
-  "compatibilityScore": number (0-100),
-  "atsScore": number (0-100),
-  "skillsMatch": [list of matching skills],
-  "skillsGap": [list of missing skills],
-  "improvements": [
-    {
-      "type": "keyword" | "content" | "format",
-      "suggestion": "specific improvement suggestion",
-      "impact": "high" | "medium" | "low"
-    }
-  ],
-  "keywordAnalysis": {
-    "presentKeywords": [list],
-    "missingKeywords": [list],
-    "density": number
-  },
-  "suggestions": [list of specific actionable suggestions]
-}`;
-
-    try {
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert CV optimization assistant. Analyze CVs and job descriptions to provide detailed compatibility insights.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 2000,
-          temperature: 0.3,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const content = data.choices[0].message.content;
-      
-      try {
-        return JSON.parse(content);
-      } catch (parseError) {
-        console.error('Error parsing OpenAI response:', parseError);
-        throw new Error('Invalid response format from AI service');
-      }
-    } catch (error) {
-      console.error('Error calling OpenAI API:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Optimize CV content based on job description
-   */
-  async optimizeCV(cvText, jobDescription, analysisResult) {
-    const prompt = `
-Based on the following CV analysis, optimize the CV content to better match the job description.
-
-Original CV:
-${cvText}
-
-Job Description:
-${jobDescription}
-
-Analysis Results:
-${JSON.stringify(analysisResult, null, 2)}
-
-Please provide an optimized version of the CV that:
-1. Incorporates missing keywords naturally
-2. Highlights relevant skills and experience
-3. Improves ATS compatibility
-4. Maintains professional tone and accuracy
-5. Keeps the same general structure
-
-Return the optimized CV text only, without any additional formatting or commentary.`;
-
-    try {
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-3.5-turbo',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert CV writer. Optimize CVs to match job requirements while maintaining accuracy and professionalism.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 3000,
-          temperature: 0.2,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.choices[0].message.content.trim();
-    } catch (error) {
-      console.error('Error optimizing CV:', error);
-      throw error;
-    }
-  }
-}
-
-/**
  * Document Processing Service
  */
 class DocumentService {
@@ -188,23 +40,20 @@ class DocumentService {
    */
   async extractFromPDF(file) {
     try {
-      // For now, we'll use a simple approach
-      // In production, you'd use libraries like pdf-lib or pdf2pic
-      const reader = new FileReader();
-      
-      return new Promise((resolve, reject) => {
-        reader.onload = async (event) => {
-          try {
-            // This is a placeholder - you'd implement actual PDF parsing here
-            // For now, we'll just return a message asking users to copy-paste
-            resolve('PDF text extraction is not implemented in this demo. Please copy and paste your CV content manually.');
-          } catch (error) {
-            reject(new Error('Failed to extract text from PDF'));
-          }
-        };
-        reader.onerror = () => reject(new Error('Failed to read PDF file'));
-        reader.readAsArrayBuffer(file);
-      });
+      // Using pdfjs-dist for client-side PDF parsing
+      const pdfjsLib = await import('pdfjs-dist/webpack');
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        fullText += pageText + '\n';
+      }
+
+      return fullText.trim();
     } catch (error) {
       throw new Error('PDF processing failed');
     }
@@ -216,8 +65,10 @@ class DocumentService {
    */
   async extractFromWord(file) {
     try {
-      // This is a placeholder - you'd use libraries like mammoth.js
-      return 'Word document text extraction is not implemented in this demo. Please copy and paste your CV content manually.';
+      const mammoth = await import('mammoth');
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value;
     } catch (error) {
       throw new Error('Word document processing failed');
     }
@@ -249,8 +100,44 @@ class DocumentService {
  */
 export class APIService {
   constructor() {
-    this.openai = new OpenAIService();
     this.document = new DocumentService();
+    this.serverBaseURL = process.env.REACT_APP_SERVER_URL || 'http://localhost:5000';
+  }
+
+  /**
+   * Get authentication headers for server requests
+   */
+  getAuthHeaders() {
+    const token = localStorage.getItem('authToken');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : '',
+    };
+  }
+
+  /**
+   * Make authenticated request to server
+   */
+  async makeServerRequest(endpoint, options = {}) {
+    const url = `${this.serverBaseURL}${endpoint}`;
+    const config = {
+      method: 'GET',
+      headers: this.getAuthHeaders(),
+      ...options,
+    };
+
+    if (options.body) {
+      config.body = JSON.stringify(options.body);
+    }
+
+    const response = await fetch(url, config);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Server request failed: ${response.status}`);
+    }
+
+    return response.json();
   }
 
   /**
@@ -325,7 +212,81 @@ export class APIService {
   }
 
   /**
-   * Analyze CV against job description
+   * Analyze CV text directly against job description without storing
+   */
+  async analyzeCVText(cvText, jobDescription) {
+    try {
+      if (!cvText || !jobDescription) {
+        throw new Error('CV text and job description are required');
+      }
+
+      const startTime = Date.now();
+      const analysisResult = await this.makeServerRequest('/api/analysis/analyze', {
+        method: 'POST',
+        body: { 
+          cvText,
+          jobDescription
+        }
+      });
+      const processingTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        analysis: {
+          ...analysisResult.data.analysis,
+          processingTime
+        },
+        message: 'CV analysis completed successfully'
+      };
+    } catch (error) {
+      console.error('Error analyzing CV text:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Optimize CV text directly based on analysis without storing
+   */
+  async optimizeCVText(cvText, jobDescription, analysisData = null) {
+    try {
+      if (!cvText || !jobDescription) {
+        throw new Error('CV text and job description are required');
+      }
+
+      // If no analysis data provided, perform analysis first
+      let analysis = analysisData;
+      if (!analysis) {
+        const analysisResponse = await this.analyzeCVText(cvText, jobDescription);
+        analysis = analysisResponse.analysis;
+      }
+
+      const startTime = Date.now();
+      const optimizationResult = await this.makeServerRequest('/api/analysis/optimize', {
+        method: 'POST',
+        body: { 
+          cvText,
+          jobDescription,
+          analysisData: analysis
+        }
+      });
+      const processingTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        optimization: {
+          ...optimizationResult.data.optimization,
+          processingTime
+        },
+        message: 'CV optimization completed successfully'
+      };
+    } catch (error) {
+      console.error('Error optimizing CV text:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze CV against job description using secure server endpoint
    */
   async analyzeCV(userId, cvId, jobId) {
     try {
@@ -347,19 +308,22 @@ export class APIService {
         };
       }
 
-      // Perform AI analysis
+      // Call secure server endpoint for AI analysis
       const startTime = Date.now();
-      const analysisResult = await this.openai.analyzeCVCompatibility(
-        cv.originalText,
-        job.description
-      );
+      const analysisResult = await this.makeServerRequest('/api/analysis/analyze', {
+        method: 'POST',
+        body: { 
+          cvText: cv.originalText,
+          jobDescription: job.description
+        }
+      });
       const processingTime = Date.now() - startTime;
 
       // Save analysis to Firestore
       const analysis = await analysisService.createAnalysis(userId, {
         cvId,
         jobId,
-        ...analysisResult,
+        ...analysisResult.data.analysis,
         processingTime
       });
 
@@ -375,7 +339,7 @@ export class APIService {
   }
 
   /**
-   * Optimize CV based on analysis
+   * Optimize CV based on analysis using secure server endpoint
    */
   async optimizeCV(userId, cvId, jobId) {
     try {
@@ -387,22 +351,25 @@ export class APIService {
       const cv = await cvService.getById(cvId);
       const job = await jobService.getById(jobId);
 
-      // Optimize CV content
+      // Call secure server endpoint for CV optimization
       const startTime = Date.now();
-      const optimizedText = await this.openai.optimizeCV(
-        cv.originalText,
-        job.description,
-        analysis
-      );
+      const optimizationResult = await this.makeServerRequest('/api/analysis/optimize', {
+        method: 'POST',
+        body: { 
+          cvText: cv.originalText,
+          jobDescription: job.description,
+          analysisData: analysis
+        }
+      });
       const processingTime = Date.now() - startTime;
 
-      // Calculate improvement score
-      const improvement = Math.max(0, analysis.atsScore - (cv.optimization?.previousAtsScore || 0));
-      const newAtsScore = Math.min(100, analysis.atsScore + 10); // Simulate improvement
+      const optimizationData = optimizationResult.data.optimization;
+      const improvement = optimizationData.improvement || 0;
+      const newAtsScore = optimizationData.atsScore || 0;
 
       // Update CV with optimization
-      const optimizationData = {
-        optimizedText,
+      const cvUpdateData = {
+        optimizedText: optimizationData.optimizedCV || optimizationData.optimizedText,
         stats: {
           ...cv.stats,
           processingTime
@@ -416,13 +383,13 @@ export class APIService {
         }
       };
 
-      await cvService.updateOptimization(cvId, optimizationData);
+      await cvService.updateOptimization(cvId, cvUpdateData);
 
       return {
         success: true,
         cv: {
           ...cv,
-          ...optimizationData
+          ...cvUpdateData
         },
         improvement,
         newAtsScore,

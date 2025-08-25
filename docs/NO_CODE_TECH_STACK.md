@@ -197,15 +197,6 @@ Lovable Frontend ↔ Supabase Database ↔ N8n Workflows
 ## 🚀 Development & Deployment
 
 ### Development Workflow:
-```json
-{
-  "frontend": "Develop in Lovable with AI assistance",
-  "workflows": "Build automation in N8n visual editor", 
-  "database": "Manage schema in Supabase dashboard",
-  "testing": "End-to-end testing with real data",
-  "deployment": "One-click deploy from each platform"
-}
-```
 
 ### Version Control Strategy:
 - **GitHub repository** - Central code and documentation
@@ -237,23 +228,12 @@ Lovable Frontend ↔ Supabase Database ↔ N8n Workflows
 
 ---
 
-## 🔍 Competitive Advantages
-
-### Why This Stack Wins:
-1. **Speed to Market** - MVP in 4 weeks vs 3-6 months traditional development
-2. **Universal Compatibility** - Works with any job posting (copy-paste from anywhere)
-3. **Deep Company Intelligence** - Exa research provides real insights vs generic templates
-4. **Anti-Detection Excellence** - Research-backed authenticity vs detectable AI patterns
-5. **Cost Effective** - No developer salaries for MVP phase
-6. **Reliable Workflow** - Text input eliminates crawling failures
-
 ### Unique Value Propositions:
 - **Universal Job Support** - Copy from LinkedIn, Indeed, company sites, email, anywhere
 - **Smart Company Discovery** - Automatically extract and research companies
 - **Deep Intelligence Gathering** - Real company culture, values, recent news
-- **ATS Bypass Technology** - Research-backed optimization strategies
+- **ATS-friendly Optimization** - Structured, keyword-aligned content based on research
 - **Human-Authentic Content** - AI that writes like informed humans, not bots
-
 ---
 
 ## 🔄 Migration & Evolution Path
@@ -291,19 +271,10 @@ Lovable Frontend ↔ Supabase Database ↔ N8n Workflows
 1. **Lovable Project** - Initialize CV Improver app
 2. **Supabase Setup** - Database, auth, storage configuration
 3. **N8n Installation** - Workflow platform setup
-4. **GitHub Integration** - Version control and backup
-
-### Week 2: Core Integrations  
-1. **OpenAI Connection** - AI service integration via N8n
-2. **FireCrawl Setup** - Web research capability
-3. **Exa Search Integration** - Deep research functionality
-4. **Basic UI Components** - CV upload and display
-
-### Week 3: Workflow Development
-1. **CV Processing Pipeline** - End-to-end automation
-2. **Research Workflows** - Company and industry intelligence
-3. **Anti-Detection Logic** - Human-like content generation
-4. **Export Functionality** - PDF and Markdown generation
+### Business Metrics:
+- **User Satisfaction** - Research-driven improvements
+- **ATS Parsing Success Rate** - Correct parsing by common ATS (no images/headers; text extracted as intended)
+- **Interview Conversion** - Real-world application success
 
 ### Week 4: Testing & Polish
 1. **End-to-End Testing** - Full user journey validation

@@ -18,15 +18,7 @@
 ### **Step 2: Configure API Credentials**
 
 #### **OpenAI Credentials**
-```json
-{
-  "name": "OpenAI API",
-  "type": "openAiApi",
-  "data": {
-    "apiKey": "your-openai-api-key-here"
-  }
-}
-```
+
 
 #### **Exa Search Credentials**
 ```json
@@ -241,7 +233,7 @@ CREATE INDEX idx_company_cache_expires ON company_research_cache(expires_at);
 #### **Caching Strategy**
 ```javascript
 // Example caching logic
-const cacheKey = `company_${companyName}`;
+const cacheKey = `company_${sanitize(companyName)}`;
 const cachedData = await checkCache(cacheKey);
 
 if (cachedData && !isExpired(cachedData)) {
@@ -251,7 +243,6 @@ if (cachedData && !isExpired(cachedData)) {
   await saveCache(cacheKey, freshData, '24h');
   return freshData;
 }
-```
 
 ---
 

@@ -38,8 +38,20 @@ service cloud.firestore {
 
     // CVs collection
     match /cvs/{cvId} {
-      allow read, write: if isAuthenticated() && 
-                            isOwner(resource.data.userId);
+      allow read: if isAuthenticated() && 
+                     resource != null && isOwner(resource.data.userId);
+      allow write: if isAuthenticated() && 
+                      ((resource == null && isOwner(request.resource.data.userId)) ||
+                       (resource != null && isOwner(resource.data.userId)));
+-                            isOwner(resource.data.userId);
+
+      // After: split rules to guard read with a null check
+      allow read: if isAuthenticated() &&
+                     resource != null && isOwner(resource.data.userId);
+      allow write: if isAuthenticated() &&
+                      isOwner(resource.data.userId);
+      allow write: if isAuthenticated() && 
+                      isOwner(resource.data.userId);
                             
       allow create: if isAuthenticated() && 
                        isOwner(request.resource.data.userId) &&
@@ -57,9 +69,9 @@ service cloud.firestore {
                data.originalText.size() <= 50000; // 50KB text limit
       }
       
-      function checkCVLimit() {
-        let userId = request.resource.data.userId;
-        let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      allow read, write: if isAuthenticated() && 
+                            ((resource == null && isOwner(request.resource.data.userId)) ||
+                             (resource != null && isOwner(resource.data.userId)));
         return userDoc.data.plan == 'paid' || 
                userDoc.data.cvCount < userDoc.data.maxCvs;
       }
@@ -67,9 +79,9 @@ service cloud.firestore {
 
     // Jobs collection
     match /jobs/{jobId} {
-      allow read, write: if isAuthenticated() && 
-                            isOwner(resource.data.userId);
-                            
+      allow read, write: if isAuthenticated() &&
+                            ((resource == null && isOwner(request.resource.data.userId)) ||
+                             (resource != null && isOwner(resource.data.userId)));
       allow create: if isAuthenticated() && 
                        isOwner(request.resource.data.userId) &&
                        validateJobData();

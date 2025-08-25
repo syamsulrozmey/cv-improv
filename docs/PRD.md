@@ -2,7 +2,9 @@
 ## CV Improver
 
 ### Version: 1.0
-### Date: July 27, 2025
+### Version: 1.0
+### Date: August 25, 2025
+### Document Owner: Product Team
 ### Document Owner: Product Team
 
 ---
